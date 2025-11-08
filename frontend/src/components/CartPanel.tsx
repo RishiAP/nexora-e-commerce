@@ -9,21 +9,23 @@ import { toast } from "sonner";
 import { useState, useEffect, useRef } from "react";
 import { Input } from "./ui/input";
 
+import { Cart, CartItem, QtyChange, getProductId, getProductPrice } from "@/lib/types";
+
+interface CartPanelProps {
+  cart: Cart | null;
+  onRemove: (id: string) => void | Promise<void>;
+  onApplyChanges?: (changes: QtyChange[]) => void | Promise<void>;
+  removingIds?: Record<string, boolean>;
+  isUpdating?: boolean;
+}
+
 export default function CartPanel({
   cart,
   onRemove,
   onApplyChanges,
   removingIds,
   isUpdating,
-}: {
-  cart: any | null;
-  onRemove: (id: string) => void;
-  onApplyChanges?: (changes: Array<{ id: string; newQty: number; original: number }>) => void;
-  // map of productId -> true when that item is being removed
-  removingIds?: Record<string, boolean>;
-  // true when the cart update batch is in progress
-  isUpdating?: boolean;
-}) {
+}: CartPanelProps) {
   const [localQty, setLocalQty] = useState<Record<string, number>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [animatedItems, setAnimatedItems] = useState<Record<string, boolean>>({});
@@ -34,8 +36,8 @@ export default function CartPanel({
   useEffect(() => {
     if (!cart || !cart.products) return;
     const map: Record<string, number> = {};
-    cart.products.forEach((it: any) => {
-      const id = it.product._id || it.product;
+    cart.products.forEach((it: CartItem) => {
+      const id = getProductId(it.product);
       map[id] = it.quantity;
     });
     setLocalQty(map);
@@ -69,8 +71,8 @@ export default function CartPanel({
     );
   }
 
-  const total = cart.products.reduce((acc: number, item: any) => {
-    const price = item.product?.price ?? 0;
+  const total = cart.products.reduce((acc: number, item: CartItem) => {
+    const price = getProductPrice(item.product) ?? 0;
     return acc + price * item.quantity;
   }, 0);
 
@@ -79,8 +81,8 @@ export default function CartPanel({
       <CardContent>
         <CardTitle>Cart</CardTitle>
         <div className="mt-3 space-y-3">
-          {cart.products.map((item: any) => {
-            const id = item.product._id || item.product;
+          {cart.products.map((item: CartItem) => {
+            const id = getProductId(item.product);
             const isRemoving = !!removingIds?.[id];
             const changed = (localQty[id] ?? item.quantity) !== item.quantity;
             const itemAnimating = !!animatedItems[id];
@@ -93,8 +95,8 @@ export default function CartPanel({
                 }
               >
                 <div className="flex-1">
-                  <div className="font-semibold">{item.product?.name}</div>
-                  <div className="text-sm text-muted-foreground">${(item.product?.price ?? 0).toFixed(2)}</div>
+                  <div className="font-semibold">{typeof item.product === 'string' ? item.product : item.product.name}</div>
+                  <div className="text-sm text-muted-foreground">${(getProductPrice(item.product) ?? 0).toFixed(2)}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Input
@@ -153,12 +155,12 @@ export default function CartPanel({
             disabled={!hasChanges || localUpdating || !!isUpdating}
             onClick={async () => {
               if (!onApplyChanges || localUpdating || isUpdating) return;
-              const changes = Object.entries(localQty)
+              const changes: QtyChange[] = Object.entries(localQty)
                 .map(([id, newQty]) => {
-                  const original = cart.products.find((p: any) => (p.product._id || p.product) === id)?.quantity ?? 0;
+                  const original = cart.products.find((p: CartItem) => getProductId(p.product) === id)?.quantity ?? 0;
                   return { id, newQty, original };
                 })
-                .filter((c: any) => c.newQty !== c.original);
+                .filter((c) => c.newQty !== c.original);
               if (changes.length === 0) return;
               try {
                 setLocalUpdating(true);

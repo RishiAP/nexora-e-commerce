@@ -7,15 +7,15 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "./ui/input";
 
-export default function ProductCard({
-  product,
-  onAdd,
-  isAdding,
-}: {
-  product: { _id?: string; name: string; price: number };
-  onAdd: (id: string, qty: number) => void;
+import { Product, getProductId } from "@/lib/types";
+
+interface ProductCardProps {
+  product: Product;
+  onAdd: (id: string, qty: number) => void | Promise<void>;
   isAdding?: boolean;
-}) {
+}
+
+export default function ProductCard({ product, onAdd, isAdding }: ProductCardProps) {
   // keep the input as a string so the user can backspace and type freely
   const [qtyStr, setQtyStr] = React.useState<string>("1");
   // local loading to show a visible spinner icon regardless of parent state
@@ -62,11 +62,12 @@ export default function ProductCard({
           />
           <Button
             onClick={async () => {
-              if (!product._id) return;
+              const id = getProductId(product);
+              if (!id) return;
               try {
                 setLoading(true);
                 // handle both sync and async onAdd
-                await Promise.resolve(onAdd(product._id, qty));
+                await Promise.resolve(onAdd(id, qty));
                 toast.success(`Added ${qty} ${qty > 1 ? 'items' : 'item'} to cart`);
               } catch (err) {
                 console.error(err);

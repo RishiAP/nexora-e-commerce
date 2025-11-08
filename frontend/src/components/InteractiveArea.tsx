@@ -8,38 +8,41 @@ import Modal from "./Modal";
 import { Input } from "./ui/input";
 import { addToCart, removeFromCart, checkout } from "@/lib/api";
 import { toast } from "sonner";
+import { Cart, Product, OrderReceipt, CartItem, getProductId, getProductPrice } from "@/lib/types";
 
-export default function InteractiveArea({ products, cart: initialCart }: { products: any[]; cart: any | null }) {
-  const [cart, setCart] = useState(initialCart);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [receipt, setReceipt] = useState<any | null>(null);
+interface InteractiveAreaProps {
+  products: Product[];
+  cart: Cart | null;
+}
+
+export default function InteractiveArea({ products, cart: initialCart }: InteractiveAreaProps) {
+  const [cart, setCart] = useState<Cart | null>(initialCart);
+  const [receipt, setReceipt] = useState<OrderReceipt | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
 
-  function setQty(id: string, val: number) {
-    setQuantities((q) => ({ ...q, [id]: val }));
-  }
+  // quantities state kept for possible future per-product quantity controls
 
   async function handleAdd(id: string, qty?: number) {
-    const useQty = typeof qty === "number" ? qty : quantities[id] ?? 1;
+    const useQty = typeof qty === "number" ? qty : 1;
     
     // Optimistically update cart
-    setCart((prevCart: any) => {
-      const product = products.find(p => p._id === id);
+    setCart((prevCart: Cart | null) => {
+      const product = products.find(p => getProductId(p) === id);
       if (!product) return prevCart;
       
       if (!prevCart || !prevCart.products) {
         return {
           products: [{ product, quantity: useQty }],
-          total: product.price * useQty
+          total: product.price * useQty,
         };
       }
       
       const existingItemIndex = prevCart.products.findIndex(
-        (item: any) => (item.product._id || item.product) === id
+        (item: CartItem) => getProductId(item.product) === id
       );
       
-      const newProducts = [...prevCart.products];
+  const newProducts = [...prevCart.products];
       if (existingItemIndex >= 0) {
         newProducts[existingItemIndex] = {
           ...newProducts[existingItemIndex],
@@ -49,8 +52,8 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
         newProducts.push({ product, quantity: useQty });
       }
       
-      const total = newProducts.reduce((acc: number, item: any) => {
-        const price = item.product?.price ?? 0;
+      const total = newProducts.reduce((acc: number, item: CartItem) => {
+        const price = getProductPrice(item.product) ?? 0;
         return acc + price * item.quantity;
       }, 0);
       
@@ -66,15 +69,15 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
 
   async function handleRemove(id: string) {
     // Optimistically remove from cart
-    setCart((prevCart: any) => {
+    setCart((prevCart: Cart | null) => {
       if (!prevCart || !prevCart.products) return prevCart;
       
       const newProducts = prevCart.products.filter(
-        (item: any) => (item.product._id || item.product) !== id
+        (item: CartItem) => getProductId(item.product) !== id
       );
       
-      const total = newProducts.reduce((acc: number, item: any) => {
-        const price = item.product?.price ?? 0;
+      const total = newProducts.reduce((acc: number, item: CartItem) => {
+        const price = getProductPrice(item.product) ?? 0;
         return acc + price * item.quantity;
       }, 0);
       
@@ -93,20 +96,20 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
     if (diff === 0) return;
     
     // Optimistically update cart
-    setCart((prevCart: any) => {
+    setCart((prevCart: Cart | null) => {
       if (!prevCart || !prevCart.products) return prevCart;
       
-      let newProducts = [...prevCart.products];
+  let newProducts = [...prevCart.products];
       
       if (newQty === 0) {
         // Remove item
         newProducts = newProducts.filter(
-          (item: any) => (item.product._id || item.product) !== id
+          (item: CartItem) => getProductId(item.product) !== id
         );
       } else {
         // Update quantity
         const itemIndex = newProducts.findIndex(
-          (item: any) => (item.product._id || item.product) === id
+          (item: CartItem) => getProductId(item.product) === id
         );
         
         if (itemIndex >= 0) {
@@ -117,8 +120,8 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
         }
       }
       
-      const total = newProducts.reduce((acc: number, item: any) => {
-        const price = item.product?.price ?? 0;
+      const total = newProducts.reduce((acc: number, item: CartItem) => {
+        const price = getProductPrice(item.product) ?? 0;
         return acc + price * item.quantity;
       }, 0);
       
@@ -142,7 +145,7 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
     if (!cart || !cart.products || cart.products.length === 0) return;
     try {
       setCheckingOut(true);
-      const cartItems = cart.products.map((it: any) => ({ product: it.product._id || it.product, quantity: it.quantity }));
+  const cartItems = cart.products.map((it: CartItem) => ({ product: getProductId(it.product), quantity: it.quantity }));
       const res = await checkout(cartItems);
       setReceipt(res.order ?? res);
       setShowReceipt(true);
@@ -188,7 +191,6 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
         <form
           className="mt-4"
           onSubmit={handleCheckout}
-          aria-disabled={!cart || !cart.products || cart.products.length === 0}
         >
           <h3 className="font-medium flex items-center justify-between">
             <span>Checkout</span>
@@ -238,9 +240,9 @@ export default function InteractiveArea({ products, cart: initialCart }: { produ
             <div className="mt-3">
               <h4 className="font-medium">Items</h4>
               <ul className="mt-2 space-y-2">
-                {receipt?.products?.map((it: any) => {
-                  const prodId = it.product?._id || it.product;
-                  const prod = products.find((p) => p._id === prodId || p.id === prodId) || { name: prodId, price: 0 };
+                {receipt?.products?.map((it) => {
+                  const prodId = typeof it.product === 'string' ? it.product : (it.product._id || it.product.id || "");
+                  const prod = products.find((p) => getProductId(p) === prodId) || { name: prodId, price: 0 } as Product;
                   return (
                     <li key={prodId} className="flex items-center justify-between">
                       <div>
