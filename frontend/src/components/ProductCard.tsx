@@ -5,6 +5,7 @@ import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "./ui/input";
 
 export default function ProductCard({
   product,
@@ -32,7 +33,7 @@ export default function ProductCard({
       </CardContent>
       <div className="px-6">
         <div className="flex items-center justify-between gap-3">
-          <input
+          <Input
             aria-label={`quantity-${product._id}`}
             type="number"
             inputMode="numeric"

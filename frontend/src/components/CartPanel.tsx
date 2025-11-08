@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 import { useState, useEffect, useRef } from "react";
+import { Input } from "./ui/input";
 
 export default function CartPanel({
   cart,
@@ -96,7 +97,7 @@ export default function CartPanel({
                   <div className="text-sm text-muted-foreground">${(item.product?.price ?? 0).toFixed(2)}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="number"
                     min={0}
                     value={localQty[id] ?? item.quantity}

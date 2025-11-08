@@ -1,41 +1,52 @@
 "use client";
 
+import axios from "axios";
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:4000";
 
+// Configure axios defaults
+const api = axios.create({
+  baseURL: BASE,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  withCredentials: true, // Include cookies in all requests
+});
+
 export async function getProducts() {
-  const res = await fetch(`${BASE}/api/products`);
-  if (!res.ok) throw new Error("Failed to fetch products");
-  return res.json();
+  const res = await api.get("/api/products");
+  return res.data;
 }
 
 export async function getCart() {
-  const res = await fetch(`${BASE}/api/cart`);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await api.get("/api/cart");
+    return res.data;
+  } catch (err) {
+    return null;
+  }
 }
 
 export async function addToCart(productId: string, qty = 1) {
-  const res = await fetch(`${BASE}/api/cart`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product: productId, quantity: qty }),
+  const res = await api.post("/api/cart", {
+    product: productId,
+    quantity: qty,
   });
-  if (!res.ok) throw new Error("Failed to add to cart");
-  return res.json();
+  return res.data;
 }
 
 export async function removeFromCart(productId: string) {
-  const res = await fetch(`${BASE}/api/cart/${productId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to remove from cart");
-  return res.json();
+  const res = await api.delete(`/api/cart/${productId}`);
+  return res.data;
 }
 
 export async function checkout(cartItems: Array<{ product: string; quantity: number }>) {
-  const res = await fetch(`${BASE}/api/checkout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cartItems }),
-  });
-  if (!res.ok) throw new Error("Checkout failed");
-  return res.json();
+  const res = await api.post("/api/checkout", { cartItems });
+  return res.data;
+}
+
+// Theme API functions
+export async function setTheme(theme: "light" | "dark") {
+  const res = await api.post("/api/theme", { theme });
+  return res.data;
 }

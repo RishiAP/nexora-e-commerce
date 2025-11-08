@@ -7,11 +7,10 @@ import CartPanel from "./CartPanel";
 import Modal from "./Modal";
 import { Input } from "./ui/input";
 import { addToCart, removeFromCart, checkout } from "@/lib/api";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-export default function InteractiveArea({ products, cart }: { products: any[]; cart: any | null }) {
-  const router = useRouter();
+export default function InteractiveArea({ products, cart: initialCart }: { products: any[]; cart: any | null }) {
+  const [cart, setCart] = useState(initialCart);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [receipt, setReceipt] = useState<any | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -23,31 +22,118 @@ export default function InteractiveArea({ products, cart }: { products: any[]; c
 
   async function handleAdd(id: string, qty?: number) {
     const useQty = typeof qty === "number" ? qty : quantities[id] ?? 1;
-    await addToCart(id, useQty);
-    router.refresh();
+    
+    // Optimistically update cart
+    setCart((prevCart: any) => {
+      const product = products.find(p => p._id === id);
+      if (!product) return prevCart;
+      
+      if (!prevCart || !prevCart.products) {
+        return {
+          products: [{ product, quantity: useQty }],
+          total: product.price * useQty
+        };
+      }
+      
+      const existingItemIndex = prevCart.products.findIndex(
+        (item: any) => (item.product._id || item.product) === id
+      );
+      
+      const newProducts = [...prevCart.products];
+      if (existingItemIndex >= 0) {
+        newProducts[existingItemIndex] = {
+          ...newProducts[existingItemIndex],
+          quantity: newProducts[existingItemIndex].quantity + useQty
+        };
+      } else {
+        newProducts.push({ product, quantity: useQty });
+      }
+      
+      const total = newProducts.reduce((acc: number, item: any) => {
+        const price = item.product?.price ?? 0;
+        return acc + price * item.quantity;
+      }, 0);
+      
+      return { ...prevCart, products: newProducts, total };
+    });
+    
+    // Send request in background
+    addToCart(id, useQty).catch(err => {
+      console.error(err);
+      toast.error("Failed to sync cart with server");
+    });
   }
 
   async function handleRemove(id: string) {
-    await removeFromCart(id);
-    router.refresh();
+    // Optimistically remove from cart
+    setCart((prevCart: any) => {
+      if (!prevCart || !prevCart.products) return prevCart;
+      
+      const newProducts = prevCart.products.filter(
+        (item: any) => (item.product._id || item.product) !== id
+      );
+      
+      const total = newProducts.reduce((acc: number, item: any) => {
+        const price = item.product?.price ?? 0;
+        return acc + price * item.quantity;
+      }, 0);
+      
+      return { ...prevCart, products: newProducts, total };
+    });
+    
+    // Send request in background
+    removeFromCart(id).catch(err => {
+      console.error(err);
+      toast.error("Failed to sync cart with server");
+    });
   }
 
   async function handleUpdate(id: string, newQty: number, currentQty: number) {
-    try {
-      // compute difference and send to addToCart; backend will increment by the diff
-      const diff = newQty - currentQty;
-      if (diff === 0) return;
+    const diff = newQty - currentQty;
+    if (diff === 0) return;
+    
+    // Optimistically update cart
+    setCart((prevCart: any) => {
+      if (!prevCart || !prevCart.products) return prevCart;
+      
+      let newProducts = [...prevCart.products];
+      
       if (newQty === 0) {
-        // if user set to 0, remove the item
+        // Remove item
+        newProducts = newProducts.filter(
+          (item: any) => (item.product._id || item.product) !== id
+        );
+      } else {
+        // Update quantity
+        const itemIndex = newProducts.findIndex(
+          (item: any) => (item.product._id || item.product) === id
+        );
+        
+        if (itemIndex >= 0) {
+          newProducts[itemIndex] = {
+            ...newProducts[itemIndex],
+            quantity: newQty
+          };
+        }
+      }
+      
+      const total = newProducts.reduce((acc: number, item: any) => {
+        const price = item.product?.price ?? 0;
+        return acc + price * item.quantity;
+      }, 0);
+      
+      return { ...prevCart, products: newProducts, total };
+    });
+    
+    // Send request in background
+    try {
+      if (newQty === 0) {
         await removeFromCart(id);
       } else {
-        // send difference (can be negative if backend supports it)
         await addToCart(id, diff);
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      router.refresh();
     }
   }
 
@@ -61,7 +147,9 @@ export default function InteractiveArea({ products, cart }: { products: any[]; c
       setReceipt(res.order ?? res);
       setShowReceipt(true);
       toast.success("Payment successful! Order placed.");
-      router.refresh();
+      
+      // Clear cart after successful checkout
+      setCart({ products: [], total: 0 });
     } catch (err) {
       console.error(err);
       toast.error("Payment failed. Please try again.");
@@ -87,19 +175,13 @@ export default function InteractiveArea({ products, cart }: { products: any[]; c
       <aside className="lg:col-span-1">
         <CartPanel cart={cart} onRemove={handleRemove} onApplyChanges={async (changes) => {
           try {
+            // Optimistically update all changes
             for (const c of changes) {
-              const diff = c.newQty - c.original;
-              if (c.newQty === 0) {
-                await removeFromCart(c.id);
-              } else if (diff !== 0) {
-                await addToCart(c.id, diff);
-              }
+              await handleUpdate(c.id, c.newQty, c.original);
             }
           } catch (err) {
             console.error(err);
             toast.error("Failed to update cart");
-          } finally {
-            router.refresh();
           }
         }} />
         {/** Checkout form disabled when cart empty **/}
