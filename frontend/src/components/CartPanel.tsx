@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 import { useState, useEffect, useRef } from "react";
 
@@ -25,6 +27,8 @@ export default function CartPanel({
   const [hasChanges, setHasChanges] = useState(false);
   const [animatedItems, setAnimatedItems] = useState<Record<string, boolean>>({});
   const animateClearTimers = useRef<Record<string, number>>({});
+  // local updating state so spinner shows even if parent doesn't provide isUpdating
+  const [localUpdating, setLocalUpdating] = useState(false);
 
   useEffect(() => {
     if (!cart || !cart.products) return;
@@ -122,7 +126,15 @@ export default function CartPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onRemove(id)}
+                    onClick={async () => {
+                      try {
+                        await Promise.resolve(onRemove(id));
+                        toast.success("Item removed from cart");
+                      } catch (err) {
+                        console.error(err);
+                        toast.error("Failed to remove item");
+                      }
+                    }}
                     className={isRemoving ? "opacity-80 animate-pulse" : undefined}
                     disabled={isRemoving}
                   >
@@ -137,18 +149,37 @@ export default function CartPanel({
           <Button
             variant="default"
             size="sm"
-            disabled={!hasChanges || !!isUpdating}
-            onClick={() => {
-              if (!onApplyChanges) return;
-              const changes = Object.entries(localQty).map(([id, newQty]) => {
-                const original = cart.products.find((p: any) => (p.product._id || p.product) === id)?.quantity ?? 0;
-                return { id, newQty, original };
-              }).filter((c: any) => c.newQty !== c.original);
-              onApplyChanges(changes);
+            disabled={!hasChanges || localUpdating || !!isUpdating}
+            onClick={async () => {
+              if (!onApplyChanges || localUpdating || isUpdating) return;
+              const changes = Object.entries(localQty)
+                .map(([id, newQty]) => {
+                  const original = cart.products.find((p: any) => (p.product._id || p.product) === id)?.quantity ?? 0;
+                  return { id, newQty, original };
+                })
+                .filter((c: any) => c.newQty !== c.original);
+              if (changes.length === 0) return;
+              try {
+                setLocalUpdating(true);
+                await Promise.resolve(onApplyChanges(changes));
+                toast.success("Cart updated successfully");
+              } catch (err) {
+                console.error(err);
+                toast.error("Failed to update cart");
+              } finally {
+                // short delay for perceptible spinner
+                setTimeout(() => setLocalUpdating(false), 300);
+              }
             }}
-            className={isUpdating ? "transform scale-95 animate-pulse" : undefined}
+            className={(localUpdating || isUpdating) ? "transform scale-95" : undefined}
           >
-            {isUpdating ? "Updating..." : "Update Cart"}
+            {(localUpdating || isUpdating) ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="animate-spin" /> Updating...
+              </span>
+            ) : (
+              "Update Cart"
+            )}
           </Button>
         </div>
       </CardContent>

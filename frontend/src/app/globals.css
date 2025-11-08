@@ -120,3 +120,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom one-time rotation animation for Add to Cart button */
+@keyframes rotate-once {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@layer utilities {
+  .animate-rotate-once { animation: rotate-once .6s ease; }
+}

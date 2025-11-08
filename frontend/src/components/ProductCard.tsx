@@ -3,6 +3,8 @@
 import React from "react";
 import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function ProductCard({
   product,
@@ -15,6 +17,8 @@ export default function ProductCard({
 }) {
   // keep the input as a string so the user can backspace and type freely
   const [qtyStr, setQtyStr] = React.useState<string>("1");
+  // local loading to show a visible spinner icon regardless of parent state
+  const [loading, setLoading] = React.useState<boolean>(false);
 
   const qty = Math.max(1, parseInt(qtyStr || "0", 10));
 
@@ -56,11 +60,32 @@ export default function ProductCard({
             className="w-20 border rounded px-2 py-1"
           />
           <Button
-            onClick={() => product._id && onAdd(product._id, qty)}
-            className={isAdding ? "transform scale-95 animate-pulse" : undefined}
-            disabled={isAdding}
+            onClick={async () => {
+              if (!product._id) return;
+              try {
+                setLoading(true);
+                // handle both sync and async onAdd
+                await Promise.resolve(onAdd(product._id, qty));
+                toast.success(`Added ${qty} ${qty > 1 ? 'items' : 'item'} to cart`);
+              } catch (err) {
+                console.error(err);
+                toast.error("Failed to add item to cart");
+              } finally {
+                // keep spinner visible a bit for feedback
+                setTimeout(() => setLoading(false), 400);
+              }
+            }}
+            className={isAdding || loading ? "transform scale-95" : undefined}
+            disabled={isAdding || loading}
           >
-            {isAdding ? "Adding..." : `Add ${qty > 1 ? `${qty} items` : `item`}`}
+            {isAdding || loading ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="animate-spin" />
+                Adding...
+              </span>
+            ) : (
+              `Add ${qty > 1 ? `${qty} items` : `item`}`
+            )}
           </Button>
         </div>
       </div>

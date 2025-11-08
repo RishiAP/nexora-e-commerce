@@ -1,18 +1,21 @@
 "use client";
 
 import React, { useState } from "react";
+import { Loader2 } from "lucide-react";
 import ProductCard from "./ProductCard";
 import CartPanel from "./CartPanel";
 import Modal from "./Modal";
 import { Input } from "./ui/input";
 import { addToCart, removeFromCart, checkout } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function InteractiveArea({ products, cart }: { products: any[]; cart: any | null }) {
   const router = useRouter();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [receipt, setReceipt] = useState<any | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   function setQty(id: string, val: number) {
     setQuantities((q) => ({ ...q, [id]: val }));
@@ -52,13 +55,19 @@ export default function InteractiveArea({ products, cart }: { products: any[]; c
     e.preventDefault();
     if (!cart || !cart.products || cart.products.length === 0) return;
     try {
+      setCheckingOut(true);
       const cartItems = cart.products.map((it: any) => ({ product: it.product._id || it.product, quantity: it.quantity }));
       const res = await checkout(cartItems);
       setReceipt(res.order ?? res);
       setShowReceipt(true);
+      toast.success("Payment successful! Order placed.");
       router.refresh();
     } catch (err) {
       console.error(err);
+      toast.error("Payment failed. Please try again.");
+    } finally {
+      // brief delay so spinner is perceptible
+      setTimeout(() => setCheckingOut(false), 400);
     }
   }
 
@@ -88,22 +97,55 @@ export default function InteractiveArea({ products, cart }: { products: any[]; c
             }
           } catch (err) {
             console.error(err);
+            toast.error("Failed to update cart");
           } finally {
             router.refresh();
           }
         }} />
-
-        <form className="mt-4" onSubmit={handleCheckout}>
-          <h3 className="font-medium">Checkout</h3>
+        {/** Checkout form disabled when cart empty **/}
+        <form
+          className="mt-4"
+          onSubmit={handleCheckout}
+          aria-disabled={!cart || !cart.products || cart.products.length === 0}
+        >
+          <h3 className="font-medium flex items-center justify-between">
+            <span>Checkout</span>
+            {(!cart || !cart.products || cart.products.length === 0) && (
+              <span className="text-xs text-muted-foreground">Cart empty</span>
+            )}
+          </h3>
           <div className="mt-2">
             <label className="block text-sm">Name</label>
-            <Input required className="mt-1" name="name" />
+            <Input
+              required
+              className="mt-1"
+              name="name"
+              disabled={!cart || !cart.products || cart.products.length === 0}
+            />
           </div>
-          <div className="mt-2">
+            <div className="mt-2">
             <label className="block text-sm">Email</label>
-            <Input required type="email" className="mt-1" name="email" />
+            <Input
+              required
+              type="email"
+              className="mt-1"
+              name="email"
+              disabled={!cart || !cart.products || cart.products.length === 0}
+            />
           </div>
-          <button type="submit" className="mt-3 w-full px-3 py-2 rounded bg-primary text-primary-foreground">Pay (mock)</button>
+          <button
+            type="submit"
+            disabled={!cart || !cart.products || cart.products.length === 0 || checkingOut}
+            className="mt-3 w-full px-3 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {checkingOut ? (
+              <span className="inline-flex items-center gap-2 justify-center">
+                <Loader2 className="animate-spin" /> Processing...
+              </span>
+            ) : (
+              "Pay (mock)"
+            )}
+          </button>
         </form>
 
         <Modal open={showReceipt} onClose={() => setShowReceipt(false)}>
